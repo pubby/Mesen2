@@ -72,7 +72,8 @@ private:
 	uint8_t _slIrqOffset = 0;
 
 	uint16_t _lastPpuReadAddr = 0;
-	int16_t _scanlineCounter = 0;
+	uint8_t _scanlineCounter = 0;
+	bool _scanlineCounterAssigned = false;
 	uint8_t _ppuIdleCounter = 0;
 	uint8_t _ntReadCounter = 0;
 	uint8_t _ppuReadCounter = 0;

@@ -303,7 +303,6 @@ void Rainbow::ProcessCpuClock()
 			//"The "in-frame" flag is cleared when the PPU is no longer rendering. This is detected when 3 CPU cycles pass without a PPU read having occurred (PPU /RD has not been low during the last 3 M2 rises)."
 			_inFrame = false;
 			_inHBlank = false;
-			_scanlineCounter = -1;
 			_ntFetchCounter = 0;
 			_ntReadCounter = 0;
 			_oamAddr = 0;
@@ -345,7 +344,7 @@ uint8_t Rainbow::MapperReadVram(uint16_t addr, MemoryOperationType memoryOperati
 	_ppuReadCounter++;
 	DetectScanlineStart(addr);
 
-	if(_slIrqScanline == _scanlineCounter && _slIrqOffset == _ppuReadCounter) {
+	if(_inFrame && _slIrqScanline == _scanlineCounter && _slIrqOffset == _ppuReadCounter) {
 		_slIrqPending = true;
 		UpdateIrqStatus();
 	}
@@ -530,10 +529,13 @@ void Rainbow::DetectScanlineStart(uint16_t addr)
 				//After 3 identical NT reads, trigger IRQ when the following attribute byte is read
 				if(!_inFrame) {
 					_inFrame = true;
-					_scanlineCounter = 0;
+					if(!_scanlineCounterAssigned) {
+						_scanlineCounter = 0;
+					}
 				} else {
 					_scanlineCounter++;
 				}
+				_scanlineCounterAssigned = false;
 
 				ProcessSpriteEval();
 
@@ -571,6 +573,7 @@ uint8_t Rainbow::ReadRegister(uint16_t addr)
 				);
 
 		case 0x4154: return _jitterCounter;
+		case 0x4155: return (uint8_t)_scanlineCounter;
 
 		case 0x415F:
 		{
@@ -600,6 +603,7 @@ uint8_t Rainbow::ReadRegister(uint16_t addr)
 			_inFrame = false;
 			_lastPpuReadAddr = 0;
 			_scanlineCounter = 0;
+			_scanlineCounterAssigned = false;
 			_slIrqPending = false;
 			UpdateIrqStatus();
 
@@ -683,6 +687,11 @@ void Rainbow::WriteRegister(uint16_t addr, uint8_t value)
 			break;
 
 		case 0x4153: _slIrqOffset = std::clamp<uint8_t>(value, 1, 170); break;
+
+		case 0x4155: 
+			_scanlineCounter = value; 
+			_scanlineCounterAssigned = true; 
+			break;
 
 		case 0x4158: BitUtilities::SetBits<8>(_cpuIrqReloadValue, value); break;
 		case 0x4159: BitUtilities::SetBits<0>(_cpuIrqReloadValue, value); break;
@@ -876,6 +885,7 @@ vector<MapperStateEntry> Rainbow::GetMapperStateEntries()
 	entries.push_back(MapperStateEntry("$4151/2", "Enabled", _slIrqEnabled));
 	entries.push_back(MapperStateEntry("$4153", "Cycle Offset", _slIrqOffset, MapperStateValueType::Number8));
 	entries.push_back(MapperStateEntry("$4154", "Jitter Counter", _jitterCounter, MapperStateValueType::Number8));
+	entries.push_back(MapperStateEntry("$4155", "Scanline Counter", _scanlineCounter, MapperStateValueType::Number8));
 
 	entries.push_back(MapperStateEntry("", "CPU IRQ"));
 	entries.push_back(MapperStateEntry("$4158/9", "Reload Value", _cpuIrqReloadValue, MapperStateValueType::Number16));
@@ -1062,6 +1072,7 @@ void Rainbow::Serialize(Serializer& s)
 	SV(_slIrqOffset);
 	SV(_lastPpuReadAddr);
 	SV(_scanlineCounter);
+	SV(_scanlineCounterAssigned);
 	SV(_ppuIdleCounter);
 	SV(_ntReadCounter);
 	SV(_ppuReadCounter);
